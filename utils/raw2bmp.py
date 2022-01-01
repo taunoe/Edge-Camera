@@ -11,9 +11,8 @@ import numpy as np
 import re
 
 dict_Resolutions = {
-    'QVGA':     (324, 244),
+    'QVGA':(324, 244),
 }
-
 # height = 244
 # width = 324
 

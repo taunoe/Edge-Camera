@@ -15,7 +15,7 @@ HIMAX_CMD_OFFSET_REGADDR    = 2
 HIMAX_CMD_OFFSET_REGVALUE   = 3
 
 dict_DeviceDefaultAddress = {
-    'HM01B0':       '24',
+    'HM01B0': '24',
 }
 
 def check_file_existence(x):
@@ -88,7 +88,7 @@ def main():
 
     do_convert(args, ofilename)
 
-    print "done!"
+    print("done!")
 
 
 if __name__ == "__main__":

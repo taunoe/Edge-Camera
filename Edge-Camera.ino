@@ -76,8 +76,10 @@ void setup() {
   }
 
   // Calibrate Autoexposure
-  SERIAL_PORT.println("Calibrating Auto Exposure..."); 
+  SERIAL_PORT.println("Calibrating Auto Exposure...");
+  
   myCamera.calibrateAutoExposure();
+  
   if(myCamera.status != HM01B0_ERR_OK){
     SERIAL_PORT.println("\tnot converged"); 
   }else{
@@ -103,8 +105,8 @@ void setup() {
   SERIAL_PORT.print("\n");
 #endif
 
-  SERIAL_PORT.write(0x55);                                                    // Special character to sync Python script
-  SERIAL_PORT.print("\n\n");                                                  // Newlines allow Python script to find frame start
+  SERIAL_PORT.write(0x55);   // Special character to sync Python script
+  SERIAL_PORT.print("\n\n"); // Newlines allow Python script to find frame start
 }
 
 void loop() {

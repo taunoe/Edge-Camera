@@ -157,7 +157,6 @@ def do_convert(args):
     (width, height) = dict_Resolutions.get(args.resolution, ("Resolution not supported", 0, 0))
 
     try:
-
         with serial.Serial(args.port, args.baud) as ser:
 
             h_idx = 0
@@ -171,7 +170,7 @@ def do_convert(args):
 
             # handle startup byte-by-byte to avoid frustration
             
-            print('waiting for first frame')
+            print('Waiting for first frame')
             ser.reset_input_buffer()
             sync(ser)
 
