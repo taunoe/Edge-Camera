@@ -8,6 +8,7 @@ Info:
 
 '''
 
+from os import write
 import sys # to get the data from the argument
 import struct # To unpack the data from the image header
 
@@ -68,7 +69,50 @@ with open(f'{file_name}.bmp', 'rb') as bmp:
     bmp_list_v.append(bmp_line[:bmp_w].replace("0", " "))
     bmp_line = '' #
 
-  bmp_list_v.reverse()
+  bmp_list_v.reverse() # pöörab ümber
   for line in bmp_list_v:
     print(line)
 
+# Reshape the data to adjust to n5110
+byte_word = ""
+n5110_line = []
+n5110_array = [] # 2d
+
+for line in range(0, bmp_h, 8):
+  for bit_num in range (bmp_w):
+    for bit in range(line, line + 8):
+      if bit > bmp_h - 1:
+        byte_word += 0
+      else:
+        byte_word += bmp_list[bit][bit_num]
+
+    n5110_line.append(hex(int(byte_word, 2)))
+    byte_word = ""
+  n5110_array.append(n5110_line)
+  n5110_line = []
+
+n5110_array.reverse()
+
+# Save the new array (hex data) in a txt file  (c-code file)
+with open(f'{file_name}.txt', 'w') as text_file:
+  text_file.write(
+    f'static unsigned short {file_name}_rows = {len(n5110_array)};\n'
+  )
+  text_file.write(
+    f'static unsigned short {file_name}_cols = {len(n5110_array[0])};\n'
+  )
+  text_file.write(
+    f'static unsigned char {file_name}[] = \n'
+  )
+  text_file.write('{\n')
+  for line_cnt, lines in enumerate(n5110_array):
+    for cnt, hexa in enumerate(lines):
+      text_file.write(f'{hexa}')
+      if cnt < len(lines)-1:
+        text_file.write(',')
+    if line_cnt < len(n5110_array)-1:
+      text_file.write(f',\n')
+    else:
+      text_file.write(f'\n')
+  text_file.write('};')
+  

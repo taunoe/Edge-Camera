@@ -48,6 +48,8 @@ Run this to save images on same directory:
 
 First you see something this. When I first tried this it was all I get. Only these numbers forever. Then on the next day I came back, hooked it up and miraculous it started to work.
 
+The problem is somewhere here in camera code: *myCamera.calibrateAutoExposure();*
+
 ![Fist](img/first.png)
 
 Positive output

@@ -135,21 +135,23 @@ def phase_serial_port_help(args):
             print(dev.description)
 
 def sync(ser):
+    print("sync starts")
     synced = False
     restore_timeout = ser.timeout
-    ser.timeout = 0.25
+    ser.timeout = 0.3 # 0.25
     count = 0
     while(not synced):
         result = ser.read_until(b'\x55')
+        
+        print("{} result: {}".format(count, result))
         if(result != b''):
-            print(result)
             if(result[len(result)-1] == 85):
                 synced = True
         else:
-            print(count)
             count += 1
 
     ser.timeout = restore_timeout
+    print("sync ends")
         
 
 def do_convert(args):
