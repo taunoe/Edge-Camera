@@ -8,10 +8,10 @@ from time import sleep
 import argparse
 import os.path
 from array import *
-
 from PIL import Image
 import numpy as np
 import re
+import timeit
 
 dict_Resolutions = {
     'QVGA':     (324, 244),
@@ -25,20 +25,7 @@ SUBVERSION  = 1
 
 image_count = 0
 
-# class RawData:
-#     ui8Array                = None
-
-#     def __init__(self):
-#         self.ui8Array       = array('B')
-
-
-# def check_file_existence(x):
-#     if not os.path.isfile(x):
-#         # Argparse uses the ArgumentTypeError to give a rejection message like:
-#         # error: argument input: x does not exist
-#         raise argparse.ArgumentTypeError("{0} does not exist".format(x))
-#     return x
-
+# For rotating image
 def map0(idx, iw, ih):
     return [int(idx%iw), int(idx/iw)]
 
@@ -53,12 +40,14 @@ def map3(idx, iw, ih):
 
 
 def create_bmp(args, rawdata):
+    start_time = timeit.default_timer()
     global image_count
 
     (width, height) = dict_Resolutions.get(args.resolution, ("Resolution not supported", 0, 0))
 
     print("width: {}, height: {}".format(width, height))
 
+    # Image rotate
     if args.spin == 0:
         image_width = width
         map = map0
@@ -73,28 +62,27 @@ def create_bmp(args, rawdata):
         map = map3
 
     image_height = int((height*width)/image_width)
-    print("iw: {}, ih: {}".format(image_width, image_height))
+    print("image_width: {}, image_height: {}".format(image_width, image_height))
 
-    (um, vm) = map(width*height-1, image_width, image_height)
-    print("um: {}, vm: {}".format(um, vm))
-
-    bitmap = np.zeros((image_width, image_height), dtype=np.uint8)
+    #(um, vm) = map(width*height-1, image_width, image_height)#??
+    #print("um: {}, vm: {}".format(um, vm))
+    bitmap = np.zeros((image_width, image_height), dtype=np.uint8) # h, w
 
     # fill up bitmap array - always write u dimension first 
     # (that's how data from the camera was streamed out)
-    idx = 0
+    i = 0
     for pixel in rawdata:
-        (u, v) = map(idx, image_width, image_height)
-        idx += 1
+        (u, v) = map(i, image_width, image_height)
+        i += 1
         bitmap[u, v] = pixel
-      
-    print(idx)
+
+    print("i={}px".format(i))
 
     path = os.path.dirname(args.outputfilepath)
     basename = 'hm01b0'
     outputfile = os.path.join(path, basename + '_' + str(image_count) + '.bmp')
 
-    # print (bitmap)
+    # Save bitmap
     img = Image.fromarray(bitmap, 'L')
     img.save(outputfile)
     img.show()
@@ -102,6 +90,8 @@ def create_bmp(args, rawdata):
     print ("%s created" % (basename + '_' + str(image_count) + '.bmp'))
 
     image_count += 1
+
+    print("bmp created, time: {}".format(timeit.default_timer() - start_time))
 
 # ***********************************************************************************
 #
@@ -118,7 +108,7 @@ def phase_serial_port_help(args):
                     dev.device + " and try again.")
             exit()
 
-    # otherwise, give user a list of possible com ports
+    # otherwise, give user a list of possible ports
     print(args.port.upper() +
             " not found but we detected the following serial ports:")
     for dev in devices:
@@ -134,118 +124,110 @@ def phase_serial_port_help(args):
         else:
             print(dev.description)
 
+
 def sync(ser):
-    print("sync starts")
-    synced = False
-    restore_timeout = ser.timeout
-    ser.timeout = 0.1 # 0.25
-    count = 0
-    while(not synced):
-        result = ser.read_until(b'\x55')
+  print("sync starts")
+  synced = False
+  restore_timeout = ser.timeout
+  ser.timeout = 0.1 # 0.25
+  count = 0
+  while(not synced):
+    result = ser.read_until(b'\x55')
 
-        print("{} result: {}".format(count, result))
-        if(result != b''):
-            if(result[len(result)-1] == 85):
+    print("{} result: {}".format(count, result))
+    if(result != b''):
+      if(result[len(result)-1] == 85):
                 synced = True
-        else:
-            count += 1
+    else:
+      count += 1
 
-    ser.timeout = restore_timeout
-    print("sync ends")
-        
+  ser.timeout = restore_timeout
+  print("sync ends")
+
 
 def do_convert(args):
+  try:
+    with serial.Serial(args.port, args.baud) as ser:
+      rawdata = None
+      framestart = False
+      framestop = False
 
-    (width, height) = dict_Resolutions.get(args.resolution, ("Resolution not supported", 0, 0))
+      print('Waiting for first frame')
+      ser.reset_input_buffer()
+      sync(ser)
 
-    try:
-        with serial.Serial(args.port, args.baud) as ser:
+      while(1): # todo: allow user to quit gracefully
+        line = None
+        try:
+          line = ser.readline()
+          line = line.decode('utf-8')
+          # print(line, end='')
+        except KeyboardInterrupt:
+          exit()
 
-            h_idx = 0
-            w_idx = 0
-            rawdata = None
+        # Image frame starts
+        if line == "+++ frame +++\n":
+          start_time = timeit.default_timer()
+          framestart = True
+          rawdata = [] # TODO use numpy array!
+          count = 0
+          print(line, end='')
+          continue
+        # Image frame ends
+        elif line == '--- frame ---\n':
+          framestop = True
+          print(line, end='')
+
+        # Image data
+        if framestart == True and framestop == False:
+          count += 1
+          linelist = re.findall(r"[\w']+", line)
+
+          if len(linelist) != 17:
+            print("Droping this frame!")
             framestart = False
-            framestop = False
-            framelist = list()
+            continue
 
-            # collect all pixel data into an int array
+          for item in linelist[1 : ]:
+            store = int(item, base=16)
+            if(store > 255):
+              store = 255
+            rawdata.append(store)
 
-            # handle startup byte-by-byte to avoid frustration
-            
-            print('Waiting for first frame')
-            ser.reset_input_buffer()
-            sync(ser)
+            # print(rawdata)
+            # (address, length) = rawdata.buffer_info()
+            # print(length)
+            # print(rawdata.itemsize)
 
-            print('ready')
+        elif framestart == True and framestop == True:
+          print("count={}",format(count))
+          print("rawdata lenght={}px".format(len(rawdata)))
 
-            while(1): # todo: allow user to quit gracefully
-                line = None
-                try:                    
-                    line = ser.readline()
-                    line = line.decode('utf-8')
-                    # print(line, end='')
-                except KeyboardInterrupt:
-                    exit()
+          print("Data ready > bmp, time: {}".format(timeit.default_timer() - start_time))
 
-                if line == "+++ frame +++\n":
-                    framestart = True
-                    rawdata = []
-                    count = 0
-                    print(line, end='')
-                    print('start')
-                    continue
-                elif line == '--- frame ---\n':
-                    framestop = True
-                    print(line, end='')
-                    # print(rawdata)
+          create_bmp(args, rawdata)
 
-                    # (address, length) = rawdata.buffer_info()
+          #(address, length) = rawdata.buffer_info()
 
-                    # print(length)
-                    # print(rawdata.itemsize)
+          #if (length * rawdata.itemsize) != (height * width):
+          #  print ("Incorrect total data length {}, needs {}".format( length * rawdata.itemsize, height * width))
+          #else:
+          #  framelist.append(rawdata)
 
-                if framestart == True and framestop == False:
-                    count += 1
-                    linelist = re.findall(r"[\w']+", line)
+          framestart = False
+          framestop = False
 
-                    if len(linelist) != 17:
-                        # drop this frame
-                        framestart = False
-                        continue
+  except serial.SerialException:
+    phase_serial_port_help(args)
 
-                    for item in linelist[1 : ]:
-                        store = int(item, base=16)
-                        if(store > 255):
-                            store = 255
-                        rawdata.append(store)
+  exit()
 
-                elif framestart == True and framestop == True:
-                    print('stop')
-                    print(count)
-                    print(len(rawdata))
-
-                    create_bmp(args, rawdata)
-
-                #     (address, length) = rawdata.buffer_info()
-
-                #     if (length * rawdata.itemsize) != (height * width):
-                #         print ("Incorrect total data length {}, needs {}".format( length * rawdata.itemsize, height * width))
-                #     else:
-                #         framelist.append(rawdata)
-
-                    framestart = False
-                    framestop = False
-
-    except serial.SerialException:
-        phase_serial_port_help(args)
-
-    exit()
 
 def main():
-    parser = argparse.ArgumentParser(
+  parser = argparse.ArgumentParser(
         description = 'This program converts raw data from HM01B0 to bmp files from a serial connection.')
 
-    parser.add_argument('-o', '--output', 
+  parser.add_argument('-o', '--output', 
                         dest        = 'outputfilepath',
                         required    = False,
                         help        = 'output file path',
@@ -254,14 +236,14 @@ def main():
                         type        = str
                         )
 
-    parser.add_argument('-p', '--port', 
+  parser.add_argument('-p', '--port', 
                         dest        = 'port',
                         required    = True,
                         help        = 'serial port (COM*, /dev/tty*)',
                         metavar     = 'SERIAL_PORT',
                         )
 
-    parser.add_argument('-b', '--baud', 
+  parser.add_argument('-b', '--baud', 
                         dest        = 'baud',
                         required    = False,
                         help        = 'Baud rate that the board is configured for',
@@ -269,7 +251,7 @@ def main():
                         default     = 460800,
                         )
     
-    parser.add_argument('-s', '--spin', 
+  parser.add_argument('-s', '--spin', 
                     dest        = 'spin',
                     required    = False,
                     help        = 'A number 0-3 for how many times to rotate the image (90 degree increments)',
@@ -277,7 +259,7 @@ def main():
                     default     = 1,
                     )
 
-    parser.add_argument('-r', '--resolution', 
+  parser.add_argument('-r', '--resolution', 
                         dest        = 'resolution',
                         required    = False,
                         help        = 'Resolution',
@@ -285,19 +267,17 @@ def main():
                         default     = 'QVGA',
                         )
 
-    parser.add_argument('-v', '--version',
+  parser.add_argument('-v', '--version',
                         help        = 'Program version',
                         action      = 'version',
                         version     = '%(prog)s {ver}'.format(ver = 'v%d.%d' %\
                             (VERSION, SUBVERSION))
                         )
 
-    args = parser.parse_args()
+  args = parser.parse_args()
 
-    do_convert(args)
-
-    print ("done!")
+  do_convert(args)
 
 
 if __name__ == "__main__":
-   main()
+  main()
