@@ -1,4 +1,4 @@
-# Spurkfun Edge Camera
+# Sparkfun Edge Camera
 
 My Arduino settings and code to use Sparkfun Edge with the camera module.
 
